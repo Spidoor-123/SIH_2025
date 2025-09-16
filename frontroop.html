@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Citizen Hazard Reporter</title> 
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background-color: #121212;
+      color: white;
+      display: flex;
+      flex-direction: row;
+    }
+    .column {
+      flex: 1;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    h2 {
+      margin-top: 0;
+      color: #2b9fff;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 16px;
+    }
+    button {
+      cursor: pointer;
+      background-color: #2b9fff;
+      color: white;
+      border: none;
+    }
+    button:hover {
+      background-color: #0077cc;
+    }
+    #map {
+      height: 400px;
+    }
+    .status-danger {
+      background-color: red;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .status-warning {
+      background-color: orange;
+      color: black;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .status-success {
+      background-color: green;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .status-table {
+      width: 100%;
+      margin-top: 10px;
+    }
+    .status-table td {
+      padding: 5px;
+    }
+    canvas {
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left Panel: Form -->      
+  <div class="column" style="background: #1e1e1e;">
+    <h2>Submit Hazard Report</h2>
+
+    <label>Hazard Type</label>
+    <select id="hazardType">
+      <option value="">Select Hazard</option>
+      <option value="Tsunami">Tsunami</option>
+      <option value="Flood">Flood</option>
+      <option value="High Waves">High Waves</option>
+      <option value="Safe Zone">Safe Zone</option>
+    </select>
+
+    <label>Description</label>
+    <textarea id="description" placeholder="Describe the situation..."></textarea>
+
+    <label>Severity (1-5)</label>
+    <select id="severity">
+      <option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option>
+    </select>
+
+    <button onclick="getLocation()">Use My Location</button>
+    <p id="locationDisplay">Location: Not set</p>
+
+    <input type="file" id="photoInput" accept="image/*">
+
+    <button onclick="submitReport()">Submit</button>
+    <button onclick="resetForm()">Reset</button>
+    <p id="statusMessage">Status: Idle</p>
+  </div>
+
+  <!-- Center Panel: Map -->
+  <div class="column">
+    <h2>Live Hazard Map</h2>
+    <div id="map"></div>
+    <table class="status-table">
+      <tr><td>Tsunami Warning</td><td><span class="status-danger">danger</span></td></tr>
+      <tr><td>High Wave Alert</td><td><span class="status-warning">warning</span></td></tr>
+      <tr><td>Safe Zone</td><td><span class="status-success">success</span></td></tr>
+    </table>
+  </div>
+
+  <!-- Right Panel: Social Media Trends -->
+  <div class="column" style="background: #1e1e1e;">
+    <h2>Social Media Trends</h2>
+    <canvas id="trendChart"></canvas>
+    <p><strong>Top Keywords:</strong> tsunami, waves, flood</p>
+    <p>Huge waves near Chennai! (2 mins ago)</p>
+    <p>Tsunami alert issued! (5 mins ago)</p>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let map, marker, currentLocation = null;
+
+    function initMap() {
+      map = L.map('map').setView([13.0827, 80.2707], 13); // Default to Chennai
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+      }).addTo(map);
+    }
+
+    function getLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            currentLocation = [pos.coords.latitude, pos.coords.longitude];
+            document.getElementById("locationDisplay").innerText =
+              Location: ${currentLocation[0].toFixed(4)}, ${currentLocation[1].toFixed(4)};
+            if (marker) map.removeLayer(marker);
+            marker = L.marker(currentLocation).addTo(map).bindPopup("You are here").openPopup();
+            map.setView(currentLocation, 15);
+          },
+          () => {
+            alert("Location access denied.");
+          }
+        );
+      } else {
+        alert("Geolocation not supported.");
+      }
+    }
+
+    function submitReport() {
+      const type = document.getElementById("hazardType").value;
+      const description = document.getElementById("description").value;
+      const severity = document.getElementById("severity").value;
+      const photoInput = document.getElementById("photoInput");
+
+      if (!type || !description || !currentLocation) {
+        alert("Please complete all fields and get your location.");
+        return;
+      }
+
+      const report = {
+        type,
+        description,
+        severity,
+        location: currentLocation,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Save to localStorage
+      let reports = JSON.parse(localStorage.getItem("reports") || "[]");
+      reports.push(report);
+      localStorage.setItem("reports", JSON.stringify(reports));
+
+      document.getElementById("statusMessage").innerText = "✅ Report saved offline.";
+      L.marker(currentLocation).addTo(map).bindPopup(${type} - Severity: ${severity}).openPopup();
+    }
+
+    function resetForm() {
+      document.getElementById("hazardType").value = "";
+      document.getElementById("description").value = "";
+      document.getElementById("severity").value = "5";
+      document.getElementById("photoInput").value = "";
+      document.getElementById("statusMessage").innerText = "Status: Idle";
+      document.getElementById("locationDisplay").innerText = "Location: Not set";
+    }
+
+    function drawTrendChart() {
+      const ctx = document.getElementById('trendChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Tsunami', 'Flood', 'High Waves'],
+          datasets: [{
+            label: 'Mentions',
+            data: [60, 25, 15],
+            backgroundColor: ['#e74c3c', '#95a5a6', '#2ecc71'],
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: 'white' } }
+          }
+        }
+      });
+    }
+
+    window.onload = function () {
+      initMap();
+      getLocation();
+      drawTrendChart();
+    }
+  </script>
+</body>
+</html>
